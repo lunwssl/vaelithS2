@@ -1203,6 +1203,333 @@ Duration: $([math]::Round($scanDuration,1)) seconds
     Write-Host ""
     Write-Host "  [CLEAN] System appears clean of '$userInput'." -ForegroundColor $C_Clean
 }
+<#
+    ██╗   ██╗ █████╗ ███████╗██╗     ██╗████████╗██╗  ██╗
+    ██║   ██║██╔══██╗██╔════╝██║     ██║╚══██╔══╝██║  ██║
+    ██║   ██║███████║█████╗  ██║     ██║   ██║   ███████║
+    ╚██╗ ██╔╝██╔══██║██╔══╝  ██║     ██║   ██║   ██╔══██║
+     ╚████╔╝ ██║  ██║███████╗███████╗██║   ██║   ██║  ██║
+      ╚═══╝  ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝   ╚═╝   ╚═╝  ╚═╝
 
+    VAELITH V3 EXTENDED MODULES (VERSÃO COMPLETA PROG)
+    MODULES 21 → 35
+#>
+
+# ==========================================
+# --- [21/35] USB DEVICE HISTORY ---
+# ==========================================
+Write-Host "`n  [21/35] USB Device History" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (USB devices, mount points, serial traces)" -ForegroundColor $C_Dim
+
+$usbFound = $false
+$usbPaths = @(
+    "HKLM:\SYSTEM\CurrentControlSet\Enum\USBSTOR",
+    "HKLM:\SYSTEM\MountedDevices",
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2"
+)
+
+foreach ($up in $usbPaths) {
+    if (Test-Path $up) {
+        Get-ChildItem -Path $up -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match $regexTerm } |
+            ForEach-Object {
+                Add-Result "USB-HISTORY" $_.Name "USB artifact located"
+                $usbFound = $true
+            }
+    }
+}
+if (-not $usbFound) { Write-Host "    [CLEAN] No USB history references found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [22/35] AMCACHE.HVE ---
+# ==========================================
+Write-Host "`n  [22/35] Amcache.hve Execution Database" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Executed programs, hashes, deleted paths)" -ForegroundColor $C_Dim
+
+$amcacheFound = $false
+$amcacheFile = "C:\Windows\AppCompat\Programs\Amcache.hve"
+
+if (Test-Path $amcacheFile) {
+    try {
+        reg load HKLM\TempAmcache $amcacheFile | Out-Null
+        Get-ChildItem "HKLM:\TempAmcache\Root\File" -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match $regexTerm } |
+            ForEach-Object {
+                Add-Result "AMCACHE" $_.PSPath "Execution artifact"
+                $amcacheFound = $true
+            }
+        reg unload HKLM\TempAmcache | Out-Null
+    } catch {}
+}
+if (-not $amcacheFound) { Write-Host "    [CLEAN] No Amcache references found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [23/35] SRUM DATABASE ---
+# ==========================================
+Write-Host "`n  [23/35] SRUM Database" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Resource usage and execution telemetry)" -ForegroundColor $C_Dim
+
+$srumFound = $false
+$srumDB = "C:\Windows\System32\sru\SRUDB.dat"
+
+if (Test-Path $srumDB) {
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($srumDB)
+        $text  = [System.Text.Encoding]::Unicode.GetString($bytes)
+        if ($text -match $regexTerm) {
+            Add-Result "SRUM" $srumDB "SRUM references '$userInput'"
+            $srumFound = $true
+        }
+    } catch {}
+}
+if (-not $srumFound) { Write-Host "    [CLEAN] No SRUM references found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [24/35] REMOTE DESKTOP HISTORY ---
+# ==========================================
+Write-Host "`n  [24/35] Remote Desktop History" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (RDP servers, usernames, sessions)" -ForegroundColor $C_Dim
+
+$rdpFound = $false
+$rdpPaths = @(
+    "HKCU:\Software\Microsoft\Terminal Server Client\Default",
+    "HKCU:\Software\Microsoft\Terminal Server Client\Servers"
+)
+foreach ($path in $rdpPaths) {
+    if (Test-Path $path) {
+        Get-ItemProperty -Path $path -ErrorAction SilentlyContinue | Where-Object { $_.PSObject.Properties.Value -match $regexTerm } | ForEach-Object {
+            Add-Result "RDP" $path "RDP history artifact match"
+            $rdpFound = $true
+        }
+    }
+}
+if (-not $rdpFound) { Write-Host "    [CLEAN] No Remote Desktop references found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [25/35] OPEN HANDLES / LOCKED FILES ---
+# ==========================================
+Write-Host "`n  [25/35] Open Handles / Locked Files" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Running processes and active locks)" -ForegroundColor $C_Dim
+
+$handlesFound = $false
+Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $regexTerm -or $_.Path -match $regexTerm } | ForEach-Object {
+    Add-Result "HANDLES" $_.Path "Active active process tracking"
+    $handlesFound = $true
+}
+if (-not $handlesFound) { Write-Host "    [CLEAN] No suspicious active handles found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [26/35] STARTUP PERSISTENCE ---
+# ==========================================
+Write-Host "`n  [26/35] Startup Persistence Locations" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Run keys, RunOnce, startup folders)" -ForegroundColor $C_Dim
+
+$startupFound = $false
+$startupPaths = @(
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run",
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce",
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run",
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
+)
+foreach ($path in $startupPaths) {
+    if (Test-Path $path) {
+        Get-ItemProperty -Path $path -ErrorAction SilentlyContinue | Where-Object { $_.PSObject.Properties.Value -match $regexTerm } | ForEach-Object {
+            Add-Result "STARTUP" $path "Persistence registry trace found"
+            $startupFound = $true
+        }
+    }
+}
+if (-not $startupFound) { Write-Host "    [CLEAN] No active startup persistence found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [27/35] SERVICES & DRIVERS ---
+# ==========================================
+Write-Host "`n  [27/35] Services & Drivers" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Services, drivers, persistence mechanisms)" -ForegroundColor $C_Dim
+
+$srvFound = $false
+Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $regexTerm -or $_.DisplayName -match $regexTerm } | ForEach-Object {
+    Add-Result "SERVICES" $_.Name "Service string tracking match"
+    $srvFound = $true
+}
+if (-not $srvFound) { Write-Host "    [CLEAN] No tracking service signatures found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [28/35] ADS STREAMS ---
+# ==========================================
+Write-Host "`n  [28/35] Alternate Data Streams" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Hidden NTFS data streams)" -ForegroundColor $C_Dim
+
+$adsFound = $false
+$targetDirs = @([System.Environment]::GetFolderPath("UserProfile"), "C:\ProgramData")
+foreach ($dir in $targetDirs) {
+    if (Test-Path $dir) {
+        Get-ChildItem -Path $dir -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+            Get-Item $_.FullName -Stream * -ErrorAction SilentlyContinue | Where-Object { $_.Stream -ne ':$DATA' -and $_.Stream -match $regexTerm } | ForEach-Object {
+                Add-Result "ADS" $_.FileName "Hidden ADS stream metadata matched"
+                $adsFound = $true
+            }
+        }
+    }
+}
+if (-not $adsFound) { Write-Host "    [CLEAN] No Alternate Data Streams found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [29/35] MEMORY DUMPS ---
+# ==========================================
+Write-Host "`n  [29/35] Memory Dump Artifacts" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Crash dumps and forensic memory traces)" -ForegroundColor $C_Dim
+
+$dumpFound = $false
+$dumpPaths = @("C:\Windows\MEMORY.DMP", "C:\Windows\Minidump", "C:\ProgramData\CrashDumps")
+foreach ($path in $dumpPaths) {
+    if (Test-Path $path) {
+        Get-ChildItem $path -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $regexTerm } | ForEach-Object {
+            Add-Result "MEMORY-DUMP" $_.FullName "System Memory trace match"
+            $dumpFound = $true
+        }
+    }
+}
+if (-not $dumpFound) { Write-Host "    [CLEAN] No system memory dump traces found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [30/35] CLOUD SYNC ARTIFACTS ---
+# ==========================================
+Write-Host "`n  [30/35] Cloud Sync Artifacts" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (OneDrive, Dropbox, Google Drive, MEGA)" -ForegroundColor $C_Dim
+
+$cloudFound = $false
+$cloudPaths = @(
+    "$env:LocalAppData\Microsoft\OneDrive\settings",
+    "$env:AppData\Dropbox",
+    "$env:LocalAppData\Google\DriveFS"
+)
+foreach ($cp in $cloudPaths) {
+    if (Test-Path $cp) {
+        Get-ChildItem $cp -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $regexTerm } | ForEach-Object {
+            Add-Result "CLOUD-SYNC" $_.FullName "Cloud application reference"
+            $cloudFound = $true
+        }
+    }
+}
+if (-not $cloudFound) { Write-Host "    [CLEAN] No active cloud storage traces found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [31/35] SQLITE DATABASE SCAN ---
+# ==========================================
+Write-Host "`n  [31/35] SQLite Database Scan" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Discord, browsers, Electron app databases)" -ForegroundColor $C_Dim
+
+$sqliteFound = $false
+$appDataPaths = @($env:AppData, $env:LocalAppData)
+foreach ($ad in $appDataPaths) {
+    if (Test-Path $ad) {
+        Get-ChildItem $ad -Recurse -Filter "*.db" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $regexTerm } | ForEach-Object {
+            Add-Result "SQLITE-DB" $_.FullName "Application Database file match"
+            $sqliteFound = $true
+        }
+    }
+}
+if (-not $sqliteFound) { Write-Host "    [CLEAN] No tracking storage sqlite databases found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [32/35] WINDOWS TIMELINE ---
+# ==========================================
+Write-Host "`n  [32/35] Windows Timeline" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Activity history and timeline cache)" -ForegroundColor $C_Dim
+
+$timelineFound = $false
+$timelinePath = "$env:LocalAppData\ConnectedDevicesPlatform"
+if (Test-Path $timelinePath) {
+    Get-ChildItem $timelinePath -Recurse -Filter "*.db" -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            $b = [System.IO.File]::ReadAllBytes($_.FullName)
+            $t = [System.Text.Encoding]::UTF8.GetString($b)
+            if ($t -match $regexTerm) {
+                Add-Result "TIMELINE" $_.FullName "Activity History cached index match"
+                $timelineFound = $true
+            }
+        } catch {}
+    }
+}
+if (-not $timelineFound) { Write-Host "    [CLEAN] No modern timeline activity data found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [33/35] DISCORD / TELEGRAM / STEAM ---
+# ==========================================
+Write-Host "`n  [33/35] Discord / Telegram / Steam Artifacts" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Chat apps, logs, cache, downloads)" -ForegroundColor $C_Dim
+
+$appsFound = $false
+$chatPaths = @(
+    "$env:AppData\Discord",
+    "$env:AppData\Telegram Desktop",
+    "C:\Program Files (x86)\Steam"
+)
+foreach ($ap in $chatPaths) {
+    if (Test-Path $ap) {
+        Get-ChildItem $ap -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $regexTerm } | ForEach-Object {
+            Add-Result "CHAT-GAME-APPS" $_.FullName "Application operational data matched"
+            $appsFound = $true
+        }
+    }
+}
+if (-not $appsFound) { Write-Host "    [CLEAN] No communication launcher data logs found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [34/35] ENVIRONMENT VARIABLES ---
+# ==========================================
+Write-Host "`n  [34/35] Environment Variables & PATH" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (PATH hijacking and suspicious variables)" -ForegroundColor $C_Dim
+
+$envFound = $false
+Get-ChildItem Env: | Where-Object { $_.Name -match $regexTerm -or $_.Value -match $regexTerm } | ForEach-Object {
+    Add-Result "ENV-VARIABLES" $_.Name "Environment tracking entry matched"
+    $envFound = $true
+}
+if (-not $envFound) { Write-Host "    [CLEAN] No rogue environment strings found." -ForegroundColor $C_Clean }
+
+# ==========================================
+# --- [35/35] WINDOWS NOTIFICATIONS ---
+# ==========================================
+Write-Host "`n  [35/35] Windows Notification Database" -ForegroundColor $C_White
+Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+Write-Host "    (Notification database forensic traces)" -ForegroundColor $C_Dim
+
+$notifFound = $false
+$notifPath = "$env:LocalAppData\Microsoft\Windows\Notifications"
+if (Test-Path $notifPath) {
+    Get-ChildItem $notifPath -Recurse -Filter "*.db" -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            $b = [System.IO.File]::ReadAllBytes($_.FullName)
+            $t = [System.Text.Encoding]::UTF8.GetString($b)
+            if ($t -match $regexTerm) {
+                Add-Result "NOTIFICATIONS" $_.FullName "Notification database payload record"
+                $notifFound = $true
+            }
+        } catch {}
+    }
+}
+if (-not $notifFound) { Write-Host "    [CLEAN] No logged push notification strings found." -ForegroundColor $C_Clean }
+
+Write-Host ""
+Write-Host "  ==========================================" -ForegroundColor $C_Info
+Write-Host "    EXTENDED MODULE PACK LOADED SUCCESSFULLY" -ForegroundColor $C_White
+Write-Host "    Total Modules: 35" -ForegroundColor $C_White
+Write-Host "  ==========================================" -ForegroundColor $C_Info
 Write-Host ""
 Read-Host "  Press Enter to exit..."
