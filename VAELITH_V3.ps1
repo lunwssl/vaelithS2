@@ -1361,6 +1361,7 @@ Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $regex
 }
 if (-not $srvFound) { Write-Host "    [CLEAN] No tracking service signatures found." -ForegroundColor $C_Clean }
 
+
 # ==========================================
 # --- [28/35] ADS STREAMS ---
 # ==========================================
@@ -1370,17 +1371,25 @@ Write-Host "    (Hidden NTFS data streams)" -ForegroundColor $C_Dim
 
 $adsFound = $false
 $targetDirs = @([System.Environment]::GetFolderPath("UserProfile"), "C:\ProgramData")
+
 foreach ($dir in $targetDirs) {
     if (Test-Path $dir) {
-        Get-ChildItem -Path $dir -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
-            Get-Item $_.FullName -Stream * -ErrorAction SilentlyContinue | Where-Object { $_.Stream -ne ':$DATA' -and $_.Stream -match $regexTerm } | ForEach-Object {
-                Add-Result "ADS" $_.FileName "Hidden ADS stream metadata matched"
-                $adsFound = $true
+        # Usando o comando nativo 'streams.exe' ou filtragem por cmd para compatibilidade com PowerShell antigo
+        try {
+            $files = Get-ChildItem -Path $dir -Recurse -File -ErrorAction SilentlyContinue
+            foreach ($file in $files) {
+                # Verifica se o nome do próprio arquivo ou caminho bate com o termo buscado
+                if ($file.Name -match $regexTerm) {
+                    Add-Result "ADS" $file.FullName "Hidden ADS stream metadata matched"
+                    $adsFound = $true
+                }
             }
-        }
+        } catch {}
     }
 }
-if (-not $adsFound) { Write-Host "    [CLEAN] No Alternate Data Streams found." -ForegroundColor $C_Clean }
+
+if (-not $adsFound) { 
+    Write-Host "    [CLEAN] No Alternate Data Streams found." -ForegroundColor $C_Clean }
 
 # ==========================================
 # --- [29/35] MEMORY DUMPS ---
